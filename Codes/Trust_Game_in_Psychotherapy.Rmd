@@ -427,17 +427,10 @@ confint(lm1_3) #CI for beta regressor
 # End
 ```
 ```{r}
-# Converting plot figures into .jpeg of 300 dpi or higher 
+# Converting plot figures into .pdf files for further image processing
 
-library(magick)
-
-img <- image_read("Fig2.jpeg")
-image_info(img)
-
-ggsave("Fig2.jpeg", Fig2, width = 8, height = 3, dpi = 300)
-ggsave("Fig3.png", Fig3, width = 8, height = 4, dpi = 300)
-ggsave("Fig4.png", Fig4, width = 8, height = 4, dpi = 300)
-
-
+ggsave("Fig2.pdf", Fig2, width = 8, height = 3)
+ggsave("Fig3.pdf", Fig3, width = 8, height = 4)
+ggsave("Fig4.pdf", Fig4, width = 8, height = 4)
 ```
 
