@@ -1,7 +1,7 @@
 ---
-title: "PsyArXiv"
+title: "Trust_Game_in_Psychotherapy"
 author: "Jihan Ryu"
-date: "2023-10-17"
+date: "2024-03-12"
 output: html_document
 ---
 
@@ -20,119 +20,77 @@ library(lme4)
 library(lmerTest)
 ```
 
-# 2. Upload datasets in correct format and descriptive stats
+# 2. Upload datasets in correct format and perform descriptive stats
 
 ```{r}
 # Load datasets
 
-data022822 <- read.csv("TG_Raw_76.csv")
+data <- read.csv("~/Data/Trust_Game/Github_Trust_Game/Data/TG_Raw_76.csv")
 
-# Factor data types into correct formet
+# Factor data types into correct format
 
 factors<-c("Role","Dyad","Modality","Diagnosis","ID","Sex","Inherited","T_Experience","Medication")
 integers<-c("Perception_Mismatch","Total_Alliance","Visits","Age","Task","Goal","Bond","Indiv_Total","Intrusiveness","Previous_Alliance","Lifetime_Therapist_Number","Closeness","Dependence","Anxiety","Avoidance","RFQc","RFQu","Investor_Total","Trustee_Total","Scores_Total","rt1","rt2","rt3","rt4","rt5","rt6","rt7","rt8","rt9","rt10")
 numerics<-c("r3","r4","r5","r6","r7","r8","r9","r10","d_rf3","d_rf4","d_rf5","d_rf6","d_rf7","d_rf8","d_rf9","d_rf10","rf1","rf2","rf3","rf4","rf5","rf6","rf7","rf8","rf9","rf10")
-data022822[,factors]<-lapply(data022822[,factors], factor)
-data022822[,integers]<-lapply(data022822[,integers], as.integer)
-data022822[,numerics]<-lapply(data022822[,numerics], as.numeric)
-data022822$T_Experience <- factor(data022822$T_Experience, levels=c("<10","11+","100+"))
+data[,factors]<-lapply(data[,factors], factor)
+data[,integers]<-lapply(data[,integers], as.integer)
+data[,numerics]<-lapply(data[,numerics], as.numeric)
+data$T_Experience <- factor(data$T_Experience, levels=c("<10","11+","100+"))
 
 # Change missing, N/A, or #VALUE! data values into NA
 
-data022822[data022822 == "N/A" | data022822 == "#VALUE!" | data022822 == ""] <- NA
+data[data == "N/A" | data == "#VALUE!" | data == ""] <- NA
 
-# Create correlation matix among numerically valued variables
+# For Supplementary Figure 1: create correlation matrix among numerically valued variables
 
-temp_corr<-data022822[c(38:49,51:58,60:74),] #Subject 26 and 44 (patients, i.e. row 50 and 59) data are missing
+temp_corr<-data[c(38:49,51:58,60:74),] #Subject 26 and 44 (patients, i.e. row 50 and 59) data are missing
 temp_corr<-temp_corr %>% 
   select_if(is.numeric)
-temp_corr<-temp_corr[,1:15]
+temp_corr<-temp_corr[,1:15] # select only fully available clinical/demographic variables
 temp_corr$Indiv_Total_Counterpart = temp_corr$Total_Alliance - temp_corr$Indiv_Total # mutate a new variable called Indiv_Total_Counterpart, i.e. therapeutic alliance rated by their therapy partner (patient or therapist) in the pair
 
 corr.vars <- cor(temp_corr, method="pearson")
 p.mat <- cor_pmat(temp_corr)
-
-# Create Supplementary Fig. 1
 
 corr_plot<-ggcorrplot(corr.vars, 
            hc.order = TRUE,
            type = "lower",
            p.mat = p.mat)
 
-ggsave("corr_plot.png")
-
+ggsave("FigS1.jpeg")
 ```
 
-# 3. Mutate and extract average repayment fraction and reaction time parameters from Trust Game
+# 3. Mutate and extract average repayment fraction and reaction time parameters from trust game
 
 ```{r}
-# Mutate and generate mean reapyment values
+# Mutate and generate mean repayment values
 
-data022822 <- data022822 %>% 
+data <- data %>% 
   rowwise() %>% 
   mutate(rf_avg = mean(as.numeric(c(rf1, rf2, rf3, rf4, rf5, rf6, rf7, rf8, rf9, rf10)), na.rm = TRUE),
          rt_avg = mean(as.numeric(c(rt1, rt2, rt3, rt4, rt5, rt6, rt7, rt8, rt9, rt10)), na.rm = TRUE))
 
+# Split data frames into patients and therapists
+
+data_p<-data[data$Role=="P",]
+data_t<-data[data$Role=="T",]
+
 # Summarize group mean repayment by roles (mean & SD)
 
-rf_avg_p_mean<-colMeans(data022822[data022822$Role=="P" & is.nan(data022822$rf_avg)==FALSE,][,'rf_avg'])
-rf_avg_p_sd<-sd(data022822_p$rf_avg, na.rm = TRUE)
-rf_avg_t_mean<-colMeans(data022822[data022822$Role=="T",][,'rf_avg']) # this value should be 0.571
-rf_avg_T_sd<-sd(data022822_t$rf_avg, na.rm = TRUE)
+rf_avg_p_mean<-colMeans(data[data$Role=="P" & is.nan(data$rf_avg)==FALSE,][,'rf_avg'])
+rf_avg_p_sd<-sd(data_p$rf_avg, na.rm = TRUE)
+rf_avg_t_mean<-colMeans(data[data$Role=="T",][,'rf_avg']) # Checkpoint: this value should be 0.571
+rf_avg_T_sd<-sd(data_t$rf_avg, na.rm = TRUE)
 
-# For Supplementary Table 2: Create a separate dataframe for social reprocity information received by participants (note: reciprocity value for r1 and r2 cannot be calculated as it requires player beavhior in the previous two rounds)
+# Create Figure 2
 
-investment<-data022822[,c("Role","ID","r3","r4","r5","r6","r7","r8","r9","r10","I1","I2","I3","I4","I5","I6","I7","I8","I9","I10")]
+# Fig 2A: Mean pepayment frequency distribution between therapists and patients
 
-# Count the number of positive/negative reciprocity rounds received by looping through values in r3-r10 
-
-# Set counter for the number of positive/negative reciprocity rounds to zero
-
-investment$pos = 0
-investment$neg = 0
-
-# Loop
-
-for (j in 1:nrow(investment)){
-    for (k in 3:10){
-      if (is.na(investment[j,k])) {investment[j,k]=FALSE} #make sure all arguments are operating under TRUE/FALSE able environment
-       else{
-        if (investment[j,k]>0){
-        investment[j,]$pos = investment[j,]$pos + 1
-        }
-        if (investment[j,k]<0){
-        investment[j,]$neg = investment[j,]$neg + 1
-        }
-      }   
-    }
-}
-
-# Mean of raw investment received by participant throughout the 10-round
-
-investment<-investment %>% 
-  rowwise() %>% 
-  mutate(i_avg = mean(c(I1, I2, I3, I4, I5, I6, I7, I8, I9, I10), na.rm=TRUE))
-
-# Split dataframes into patients and therapists
-
-data022822_p<-data022822[data022822$Role=="P",]
-data022822_t<-data022822[data022822$Role=="T",]
-
-# Template correlation/inference test across clinical variables and social reciprocity differences between roles
-
-cor.test(data022822_p$rf_avg, data022822_p$Closeness, method=c("pearson")) 
-cor.test(data022822_t$rf_avg, data022822_t$Indiv_Total, alternative="two.sided", method=c("pearson")) 
-inference(y=neg, x=Role, data=investment, statistic="mean", type="ci", conf_level=0.95, method="theoretical", alternative="two.sided")
-
-# Create Figure 1
-
-# Fig 1A: Mean pepayment frequency distribution between therapists and patients
-
-Fig1A <- ggplot(data022822)+
-  geom_histogram(data=data022822[data022822$Role=="P",],
+Fig2A <- ggplot(data)+
+  geom_histogram(data=data[data$Role=="P",],
                  aes(x=rf_avg), fill="Orange", alpha = 1, position="identity")+
   geom_vline(aes(xintercept = rf_avg_p_mean), colour="Orange", linetype=5)+
-  geom_histogram(data=data022822[data022822$Role=="T",],
+  geom_histogram(data=data[data$Role=="T",],
                  aes(x=rf_avg), fill="Blue", alpha = 0.8, position="identity")+
   geom_vline(aes(xintercept = rf_avg_t_mean), colour="Blue", linetype=5)+
   geom_text(data = data.frame(x = c(0.74, 0.75),
@@ -147,9 +105,9 @@ Fig1A <- ggplot(data022822)+
                     values=c("Orange", "Blue"), 
                     labels=c("Patient", "Therapist"))
 
-# Fig 1B: Correlation between mean repayment frequency and therapeutic alliance
+# Fig 2B: Correlation between mean repayment frequency and therapeutic alliance
 
-Fig1B <- ggplot(data022822, aes(rf_avg, Indiv_Total, color=Role)) +
+Fig2B <- ggplot(data, aes(rf_avg, Indiv_Total, color=Role)) +
   geom_point() +
   geom_smooth(method="lm") +
   geom_text(data = data.frame(x = c(0.79, 0.78),
@@ -164,42 +122,83 @@ Fig1B <- ggplot(data022822, aes(rf_avg, Indiv_Total, color=Role)) +
   labs(y="Alliance", x="Mean Repayment",
        tag="B")
 
-# Combine Fig 1A, 1B into Fig 1.
+# Combine Fig 2A, 2B into Fig 2.
 
-Fig1 <- ggarrange(Fig1A, Fig1B, ncol=2, nrow=1, common.legend = TRUE)
-ggsave("Fig1.png", width=8, height=3)
+Fig2 <- ggarrange(Fig2A, Fig2B, ncol=2, nrow=1, common.legend = TRUE)
 
-# Supplementary Figure 2: Patients' average repayment fraction is not correlated with attachment closeness subscale.
+ggsave("Fig2.jpeg", width=8, height=3)
 
-FigS2a <-ggplot(data022822_p, aes(rf_avg, Closeness))  +
+# For Supplementary Figure 2: Patients' average repayment fraction is not correlated with attachment closeness subscale.
+
+FigS2 <-ggplot(data_p, aes(rf_avg, Closeness))  +
   geom_point() +
   geom_smooth(method=lm)+
   scale_color_manual(values=c("Orange"), 
                      labels=c("Patient")) +
   labs(y="Attachment Closeness", x="Mean Repayment")
 
+ggsave("FigS2.jpeg", width=8, height=3)
+
+cor.test(data_p$rf_avg, data_p$Closeness, method=c("pearson"))
+
+# For Supplementary Table 2: Create a separate data frame for reciprocity information received by participants (note: reciprocity value for r1 and r2 cannot be calculated as it requires player behavior information in the previous two rounds)
+
+investment<-data[,c("Role","ID","r3","r4","r5","r6","r7","r8","r9","r10","I1","I2","I3","I4","I5","I6","I7","I8","I9","I10")]
+
+# Count the number of positive & negative reciprocity rounds received by looping through values in r3-r10 
+
+# Set counter for the number of positive & negative reciprocity rounds to zero
+
+investment$pos = 0
+investment$neg = 0
+
+# Loop
+
+for (j in 1:nrow(investment)){
+    for (k in 3:10){
+      if (is.na(investment[j,k])) {investment[j,k]=FALSE} #make sure all arguments are operating under TRUE/FALSE enabled environment
+       else{
+        if (investment[j,k]>0){
+        investment[j,]$pos = investment[j,]$pos + 1
+        }
+        if (investment[j,k]<0){
+        investment[j,]$neg = investment[j,]$neg + 1
+        }
+      }   
+    }
+}
+
+# Calculate mean of raw investment received by participant throughout the 10 rounds
+
+investment<-investment %>% 
+  rowwise() %>% 
+  mutate(i_avg = mean(c(I1, I2, I3, I4, I5, I6, I7, I8, I9, I10), na.rm=TRUE))
+
+# Run inference test to see if reciprocity received was signifiantly different between patient vs. therapist groups
+
+inference(y=neg, x=Role, data=investment, statistic="mean", type="ci", conf_level=0.95, method="theoretical", alternative="two.sided")
 ```
 
-# 4. Prepare dataframes for reciporicty, changes in repayment, repayment fraction per individual for statistical analysis
+# 4. Transform data frames to perform statistical analysis among reciporicty, changes in repayment, repayment fraction variables per individual
 
 ```{r}
 # First pivot, r3-10, drf3-10, and rt3-10 per ID along the rows
 
-r<-data022822 %>% 
+r<-data %>% 
   pivot_longer(
     cols=c("r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"),
     names_to="round",
     values_to="r",
     values_drop_na=FALSE
   )
-d_rf<-data022822 %>% 
+d_rf<-data %>% 
   pivot_longer(
     cols=c("d_rf3", "d_rf4", "d_rf5", "d_rf6", "d_rf7", "d_rf8", "d_rf9", "d_rf10"),
     names_to="round",
     values_to="d_rf",
     values_drop_na=FALSE
   )
-rf<-data022822 %>% 
+rf<-data %>% 
   pivot_longer(
     cols=c("rf3", "rf4", "rf5", "rf6", "rf7", "rf8", "rf9", "rf10"),
     names_to="round",
@@ -207,11 +206,13 @@ rf<-data022822 %>%
     values_drop_na=FALSE
   )
 
-# Combine pivoted dataframes for reciprocity values, changes in repayment fraction in that round, repayment fraction into a new data frame, i.e. 'mixed' horizontally.
+# Combine pivoted data frames into a new data frame, i.e. 'mixed'.
 
-mixed<-cbind(r[,c(1:26,45:47,69:72)],d_rf[,72],rf[,72]) #see if all columns you are interested in analyzing are in place before combining.
+mixed <- cbind(r[,c(1:26,45:47,69:72)],
+               d_rf[,72],
+               rf[,72]) # check if selected columns refer to correct variables
 
-# Check distribution of all parameters visually before running further stats
+# Check distribution of data visually before running further stats
 
 ggplot(mixed, aes(x=r, color=ID))+
   geom_histogram(binwidth=0.1)
@@ -221,31 +222,31 @@ ggplot(mixed, aes(x=rf, color=ID))+
   geom_histogram(binwidth=0.05)
 ```
 
-# 5. Compare mean fractional change in repayment between benevolent rounds (reciprocity \>0) and malevolent rounds (reciprocity \<0)
+# 5. Compare mean fractional change in repayment between benevolent rounds (reciprocity >0) and malevolent rounds (reciprocity <0)
 
 ```{r}
-
 # Binarize reciprocity into negative (malevolence) vs positive (benevolence)
 
 mixed$intention<-ifelse(mixed$r>0,"Benevolence",
                           ifelse(mixed$r<0, "Malevolence",NA))
 
-# Delete round observations with NA in either r or d_rf column 
+# Delete rows with NA in either r or d_rf column 
 
 mixed_filtered <- mixed %>% 
-  filter(!is.na(r) & !is.na(d_rf)) #75 rounds should be lost due to NA data. 
+  filter(!is.na(r) & !is.na(d_rf)) # check if 75 rounds are lost due to NA.
 
-mixed_filtered$intention<-as.factor(mixed_filtered$intention)
-summary(mixed_filtered$intention) #26 neutral intentions. Checkpoint.
+mixed_filtered$intention <- as.factor(mixed_filtered$intention)
 
-# Fig 2: Plot changes in repayment fraction ~ social reciprocity
+summary(mixed_filtered$intention) #26 neutral (r=0) rounds. 
 
-d_rf_intention<-mixed[is.na(mixed$intention)==FALSE,] %>% 
+# Figure 3: Plot group average of repayment fraction across reciprocity condtions
+
+d_rf_intention <- mixed[is.na(mixed$intention)==FALSE,] %>% 
   group_by(intention, Role) %>% 
   summarise(sd=sd(d_rf, na.rm=TRUE), mean_d_rf=mean(d_rf, na.rm=TRUE), n=n())%>%
   mutate(se=sd/sqrt(n))
 
-Fig2 <- ggplot(d_rf_intention, aes(x=intention, y=mean_d_rf, fill=Role))+
+Fig3 <- ggplot(d_rf_intention, aes(x=intention, y=mean_d_rf, fill=Role))+
   geom_bar(stat="identity", width=0.2, position=position_dodge(width=0.2)) +
   geom_errorbar(
     aes(x=intention, ymin=mean_d_rf-se, ymax=mean_d_rf+se, width=0.04), position=position_dodge(width=0.2))+
@@ -255,9 +256,9 @@ Fig2 <- ggplot(d_rf_intention, aes(x=intention, y=mean_d_rf, fill=Role))+
                     values=c("Orange", "Blue"), 
                     labels=c("Patient", "Therapist"))
 
-ggsave("Fig2.png", width=8, height=4) 
+ggsave("Fig3.jpeg", width=8, height=4) 
 
-# Divide into different dataframes based on their roles (patients vs therapists)
+# Divide data frames per their roles (patients vs therapists)
 
 mixed_t <- mixed_filtered %>% 
   filter(Role == "T")
@@ -270,16 +271,16 @@ mixed_p_without_neutral <-mixed_p[is.na(mixed_p$intention)==FALSE,]
 mixed_t_without_neutral <-mixed_t[is.na(mixed_t$intention)==FALSE,]
 
 mixed_p_without_neutral %>% 
-  filter(intention=="Benevolence")->tbv
+  filter(intention=="Benevolence") -> tbv
 mixed_p_without_neutral %>% 
-  filter(intention!="Benevolence")->tml
+  filter(intention!="Benevolence") -> tml
 
-var.test(tbv$d_rf, tml$d_rf) #p>0.05 in variance test indicates homoscedasticity 
+var.test(tbv$d_rf, tml$d_rf) # p>0.05 in variance test indicates homoscedasticity 
 
-# Run t.test between two conditions within the same role
+# Run t.test between two conditions separately for both roles
 
 t.test(d_rf~intention, paired=FALSE, vars.equal=TRUE,
-       data=mixed_t_without_neutral) # Note: not exactly matched or paired, i.e. some patients had more malevolent rounds than benevolent rounds, error in complete.cases(x,y): not all arguments have the same length. only patient data show sig differences between conditions
+       data=mixed_p_without_neutral) # Note: observations are not exactly matched or paired, i.e. some patients had more malevolent rounds than benevolent rounds, error in complete.cases(x,y): not all arguments have the same length. only patient data show sig differences between conditions
 
 # Run t.test between two roles within same condition
 
@@ -288,26 +289,23 @@ mixed_filtered[mixed_filtered$intention=="Benevolence",] %>%
 mixed_filtered[mixed_filtered$intention=="Benevolence",] %>% 
   filter(Role!="T")->tP
 
-var.test(tT$d_rf, tP$d_rf) #p>0.05 homoscedacticity for positive (benevolence), but p=0.03 for malevolence
+var.test(tT$d_rf, tP$d_rf) # p>0.05 homoscedacticity for positive (benevolence), but p=0.03 for malevolence
 
 t.test(d_rf~Role, paired=FALSE, vars.equal=TRUE,
        data=mixed_filtered[mixed_filtered$intention=="Benevolence",]) 
-
 ```
 
 # 6. Test the effect of therapeutic alliance on repyament fraction and changes in repayment fraction for patients
 
 ```{r}
-
 # Identify median alliance in patient group to binarize alliance variables into high vs. low alliance
 
 test_mixed_p<-mixed_p %>% 
-  distinct(ID, .keep_all = TRUE) # trim down the dataframe to isolate clinical variable that is unique to each partcipant
+  distinct(ID, .keep_all = TRUE) # trim down the data frame to isolate clinical variable that is unique to each participant
 
-summary(test_mixed_p$Indiv_Total) #median should be 74. Check point. 
+summary(test_mixed_p$Indiv_Total) # median in alliance among patients should be 74. 
 
-# NOTE: we will work with neutral rounds as well, now that we are dealing with continuous variables.
-# Binarize alliance, attachment avoidance, attachment anxiety scores into "Top Half" or "Top Bottom" group
+# Binarize alliance, attachment avoidance, attachment anxiety ratings into "Top Half" or "Top Bottom" group
 
 mixed_p$alliance_Q<-ifelse(mixed_p$Indiv_Total>74,"Top_Half",
                                "Bottom_Half")
@@ -316,40 +314,44 @@ mixed_p$avoidance_Q<-ifelse(mixed_p$Avoidance>28,"Top_Half",
 mixed_p$anxiety_Q<-ifelse(mixed_p$Anxiety>22,"Top_Half",
                                "Bottom_Half")
  
-# Make binarized clinical variables into factor data type
+# Put binarized clinical variables into factor data type
 
 factors_2 <- c("alliance_Q", "avoidance_Q", "anxiety_Q")
+
 mixed_p[,factors_2]<-lapply(mixed_p[,factors_2], factor)
 
-# Run 2 (high vs. low alliance) x 2 (benevolence vs. malevolence) ANOVA test on changes in repayment fraction for patients
+# Run 2 (high vs. low alliance) x 2 (positive vs. negative reciprocity) ANOVA test to examine effect of alliance on changes in repayment fraction for patients
 
 aov_d_rf_alliance <- aov(d_rf ~ intention * alliance_Q, data=mixed_p[is.na(mixed_p$intention)==FALSE,])
+
 summary(aov_d_rf_alliance) # not significant
 
-# Run two extra 2 x 2 ANOVA to test impact of attachment anxiety (model of self), and by attachment avoidance (model of others) on changes in repayment fraction.
+# Run two extra 2 x 2 ANOVA to test impact of attachment anxiety, and by attachment avoidance on changes in repayment fraction.
 
 aov_d_rf_anxiety <- aov(d_rf ~ intention * anxiety_Q, data=mixed_p[is.na(mixed_p$intention)==FALSE,])
+
 summary(aov_d_rf_anxiety) 
 
 aov_d_rf_avoidance <- aov(d_rf ~ intention * avoidance_Q, data=mixed_p[is.na(mixed_p$intention)==FALSE,])
+
 summary(aov_d_rf_avoidance) 
 
-# Now, summarize the mean changes in repayment fraction across social reciprocity and alliance conditions 
+# For Supplementary Table 3: Summarize the mean of changes in repayment fraction across reciprocity and alliance conditions 
 
-d_rf_by_alliance_Q <-mixed_p[is.na(mixed_p$intention)==FALSE,] %>% 
+d_rf_by_alliance_Q <- mixed_p[is.na(mixed_p$intention)==FALSE,] %>% 
   group_by(alliance_Q, intention) %>% 
   summarise(sd=sd(d_rf, na.rm=TRUE), mean_d_rf=mean(d_rf, na.rm=TRUE), n=n())%>%
   mutate(se=sd/sqrt(n))
 
-# Run correlation test between mean fractional change in repayment and individual alliance ratings within each social reciprocity condition (malevolent vs. benevolent)
+# Run correlation test between mean fractional change in repayment and individual alliance ratings within each reciprocity condition (malevolent vs. benevolent)
 
-d_rf_by_intention_p <-mixed_p[is.na(mixed_p$intention)==FALSE,] %>%
+d_rf_by_intention_p <- mixed_p[is.na(mixed_p$intention)==FALSE,] %>%
   group_by(intention, ID) %>% 
   summarise(ID=ID, sd=sd(d_rf, na.rm=TRUE), mean_d_rf=mean(d_rf, na.rm=TRUE), n=n(), Indiv_Total=Indiv_Total)%>%
   mutate(se=sd/sqrt(n)) %>% 
   distinct(ID, .keep_all = TRUE)
 
-d_rf_by_anxiety_p <-mixed_p[is.na(mixed_p$intention)==FALSE,] %>%
+d_rf_by_anxiety_p <- mixed_p[is.na(mixed_p$intention)==FALSE,] %>%
   group_by(intention, ID) %>% 
   summarise(ID=ID, sd=sd(d_rf, na.rm=TRUE), mean_d_rf=mean(d_rf, na.rm=TRUE), n=n(), Anxiety=Anxiety)%>%
   mutate(se=sd/sqrt(n)) %>% 
@@ -359,23 +361,17 @@ attach(d_rf_by_intention_p[d_rf_by_intention_p$intention=="Benevolence",])
 cor.test(mean_d_rf, Indiv_Total, alternative="two.sided", method="pearson") # not significant for linear relationship in either benevolent or malevolent condition
 
 attach(d_rf_by_anxiety_p[d_rf_by_anxiety_p$intention=="Malevolence",])
-cor.test(mean_d_rf, Anxiety, alternative="two.sided", method="pearson") # how about anxiety group since its F score was high in 2 x 2 ANOVA? not sig in benevolent conditions, also not sig in malevolent conditions; but trend is anxiety increases decrease in repayment in malevolent conditions.
-
-attach(d_rf_by_anxiety_p)
-plot(mean_d_rf, Anxiety) 
-
+cor.test(mean_d_rf, Anxiety, alternative="two.sided", method="pearson") # How about anxiety group since its F score was high in 2 x 2 ANOVA? Not sig in benevolent conditions, also not sig correlations shown in malevolent conditions; but trend is that anxiety increases decrease in repayment in malevolent conditions.
 ```
 
-# 7. Build linear mixed effect models of predicting changes in repayment fraction in patients as a function of social reprocity (as continuous variable, not categorical) and clinical variables (e.g. attachment style)
+# 7. Build linear mixed effect models to predict changes in repayment fraction in patients as a function of social reprocity (as continuous variable, not categorical) and clinical variables (e.g. attachment style)
 
 ```{r}
-
 # Remove outliers of extreme malevolence or extreme benevolence, defined by r value cut off -5 and 5, and create a separate data frame for LMM modeling.
 
-mixed_p_lme4<-mixed_p[mixed_p$r > -5 & mixed_p$r < 5,] 
-str(mixed_p_lme4) #237 observation points. Checkpoint.
+mixed_p_lme4<-mixed_p[mixed_p$r > -5 & mixed_p$r < 5,] # Check if there are 237 observation points. 
 
-# Create two columns for social reciprocity variables (i.e. r_high_alliance, r_low_alliance) to store as separate predictors depending on which alliance group an individual patient belongs to
+# Create columns for reciprocity received by high alliance patient group and by low alliance patient group separately (i.e. r_high_alliance, r_low_alliance) and store them as separate predictors (regressors) 
 
 mixed_p_lme4$r_high_alliance <- ifelse(mixed_p_lme4$alliance_Q=="Top_Half",
                                   mixed_p_lme4$r, 0)
@@ -384,21 +380,21 @@ mixed_p_lme4$r_low_alliance <- ifelse(mixed_p_lme4$alliance_Q=="Bottom_Half",
 
 # Build mixed effect linear models with:
 
-# Random intercept per each patient
+## Random intercept per each patient
 
 lm1_0 <- lmer(d_rf ~ 1 + r_high_alliance + r_low_alliance + (1 | ID), data=mixed_p_lme4) 
 
-# Random slope per each patient
+## Random slope per each patient
 
 lm1_1 <- lmer(d_rf ~ 1 + r_high_alliance + r_low_alliance + (0 + r_high_alliance + r_low_alliance | ID), data=mixed_p_lme4) 
 
-# Random intercept and slope per each patient
+## Random intercept and slope per each patient
 
 lm1_2 <- lmer(d_rf ~ 1 + r_high_alliance + r_low_alliance + (1 + r_high_alliance + r_low_alliance | ID), data=mixed_p_lme4) 
 
-# Figure 3: plot y = changes in repayment fraction ~ x = social reciprocity values across high vs. low alliance groups.
+# Figure 4: plot y = changes in repayment fraction ~ x = social reciprocity values across high vs. low alliance groups.
 
-Fig3 <-ggplot(mixed_p_lme4, aes(x=r, y=d_rf, fill=alliance_Q))+
+Fig4 <- ggplot(mixed_p_lme4, aes(x=r, y=d_rf, fill=alliance_Q))+
     geom_rect(aes(xmin=-5, xmax=0, ymin=-1, ymax=1), fill = "pink", alpha = 0.01) +
   geom_rect(aes(xmin=0, xmax=5, ymin=-1, ymax=1), fill = "skyblue", alpha = 0.01) +
   geom_point(aes(fill=alliance_Q))+
@@ -408,20 +404,17 @@ Fig3 <-ggplot(mixed_p_lme4, aes(x=r, y=d_rf, fill=alliance_Q))+
   labs(x="Simulated therapist's reciprocity", y="Fractional Change in Repayment")+
   theme(legend.position = "none") 
 
-ggsave("Fig3.png", height=4, width=8)
+ggsave("Fig4.jpeg", width=8, height=4)
 
-# For supplementary table 4:
+# For Supplementary Table 4: compare the the three models to find the best fitting one
 
-# Compare thee different models
-
-anova(lm1_0, lm1_1, lm1_2)  # winner of the three
+anova(lm1_0, lm1_1, lm1_2)  # winner of the three is lm1_0 (random intercept only)
  
 # Get details of the parameter estimates from the winning model 
 
 summary(lm1_0)
-confint(lm1_0) #CI for beta regressor
-
-plot(lm1_0) # Normality check after lmm made
+confint(lm1_0) # CI for beta regressor
+plot(lm1_0) # Normality/residuals check
 
 # Controlling for avoidance or anxiety, does alliance still hold?
 
@@ -432,5 +425,19 @@ summary(lm1_3)
 confint(lm1_3) #CI for beta regressor
 
 # End
+```
+```{r}
+# Converting plot figures into .jpeg of 300 dpi or higher 
+
+library(magick)
+
+img <- image_read("Fig2.jpeg")
+image_info(img)
+
+ggsave("Fig2.jpeg", Fig2, width = 8, height = 3, dpi = 300)
+ggsave("Fig3.png", Fig3, width = 8, height = 4, dpi = 300)
+ggsave("Fig4.png", Fig4, width = 8, height = 4, dpi = 300)
+
 
 ```
+
